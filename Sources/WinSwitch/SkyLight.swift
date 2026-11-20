@@ -43,6 +43,11 @@ enum SkyLight {
     typealias MoveWindowsToManagedSpace = @convention(c) (CGSConnectionID, CFArray, UInt64) -> Int32
     static let moveWindowsToManagedSpace = sym("SLSMoveWindowsToManagedSpace", MoveWindowsToManagedSpace.self)
 
+    // Alternate space-move primitive on newer macOS releases.
+    typealias SpaceAddRemoveWindows = @convention(c) (CGSConnectionID, UInt64, CFArray, CFArray) -> Int32
+    static let spaceAddWindowsAndRemoveFromSpaces =
+        sym("SLSSpaceAddWindowsAndRemoveFromSpaces", SpaceAddRemoveWindows.self)
+
     // Raise a window within the window server's ordering (fallback when AX is unavailable).
     typealias OrderWindow = @convention(c) (CGSConnectionID, UInt32, Int32, UInt32) -> Int32
     static let orderWindow = sym("SLSOrderWindow", OrderWindow.self)

@@ -94,6 +94,29 @@ enum WindowManager {
         return onscreen + offscreen
     }
 
+    /// Lightweight id-only scan used by the thumbnail cache (no AX/icon work).
+    static func enumerateIDs() -> [CGWindowID] {
+        guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]]
+        else { return [] }
+        let myPID = ProcessInfo.processInfo.processIdentifier
+        var ids: [CGWindowID] = []
+        for dict in list {
+            guard let wid = dict[kCGWindowNumber as String] as? CGWindowID,
+                  let pid = dict[kCGWindowOwnerPID as String] as? pid_t,
+                  pid != myPID,
+                  let layer = dict[kCGWindowLayer as String] as? Int, layer == 0,
+                  let b = dict[kCGWindowBounds as String] as? [String: Any],
+                  let bounds = CGRect(dictionaryRepresentation: b as CFDictionary),
+                  bounds.width >= 50, bounds.height >= 50,
+                  let app = NSRunningApplication(processIdentifier: pid),
+                  app.activationPolicy == .regular
+            else { continue }
+            if let alpha = dict[kCGWindowAlpha as String] as? Double, alpha == 0 { continue }
+            ids.append(wid)
+        }
+        return ids
+    }
+
     // MARK: - Activation
 
     static func activate(_ w: WindowItem) {
@@ -102,27 +125,68 @@ enum WindowManager {
 
         let targetSpace = w.spaceID != 0 ? w.spaceID : space(forWindow: w.id)
         let current = currentSpace()
-        var movedToCurrentSpace = false
+        NSLog("WinSwitch activate: wid=%u space=%llu current=%llu", w.id, targetSpace, current)
 
+        var jumpedToSpace = false
+        var movedWindow = false
         if targetSpace != 0 && targetSpace != current {
             if let uuid = displayUUID(forSpace: targetSpace),
                let setSpace = SkyLight.managedDisplaySetCurrentSpace {
-                _ = setSpace(cid, uuid as CFString, targetSpace)
-            } else if let move = SkyLight.moveWindowsToManagedSpace {
+                let err = setSpace(cid, uuid as CFString, targetSpace)
+                NSLog("WinSwitch: CGSManagedDisplaySetCurrentSpace(uuid=%@) -> %d", uuid, err)
+                jumpedToSpace = (err == 0)
+            } else {
+                NSLog("WinSwitch: no display UUID for space %llu or symbol missing",
+                      targetSpace)
+            }
+            if !jumpedToSpace {
                 // Fallback: pull the window onto the current space instead.
-                _ = move(cid, [NSNumber(value: w.id)] as CFArray, current)
-                movedToCurrentSpace = true
+                movedWindow = moveWindow(w.id, to: current)
             }
         }
 
         // Give the space-switch animation a beat, then activate + raise.
-        let delay: TimeInterval = movedToCurrentSpace ? 0.05 : 0.15
+        let delay: TimeInterval = jumpedToSpace ? 0.15 : 0.05
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             activateApp(pid: w.pid)
             raiseWindow(w)
             // A second raise covers slow space transitions / apps that resist.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { raiseWindow(w) }
         }
+
+        // Rescue: if the space jump didn't take, pull the window to us.
+        if targetSpace != 0 && targetSpace != current && !movedWindow {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                let now = space(forWindow: w.id)
+                let cur = currentSpace()
+                if now != 0 && now != cur {
+                    NSLog("WinSwitch: space switch failed (window on %llu, current %llu) — moving window",
+                          now, cur)
+                    if moveWindow(w.id, to: cur) {
+                        activateApp(pid: w.pid)
+                        raiseWindow(w)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Move a window onto a space via whichever private API is present.
+    private static func moveWindow(_ wid: CGWindowID, to space: UInt64) -> Bool {
+        let cid = SkyLight.cid
+        let ids = [NSNumber(value: wid)] as CFArray
+        if let f = SkyLight.moveWindowsToManagedSpace {
+            let err = f(cid, ids, space)
+            NSLog("WinSwitch: SLSMoveWindowsToManagedSpace -> %d", err)
+            return err == 0
+        }
+        if let f = SkyLight.spaceAddWindowsAndRemoveFromSpaces {
+            let err = f(cid, space, ids, ids)
+            NSLog("WinSwitch: SLSSpaceAddWindowsAndRemoveFromSpaces -> %d", err)
+            return err == 0
+        }
+        NSLog("WinSwitch: no space-move symbol available")
+        return false
     }
 
     private static func activateApp(pid: pid_t) {

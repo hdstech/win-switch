@@ -8,11 +8,15 @@ final class LiveCapture: NSObject {
     static let shared = LiveCapture()
 
     private var stream: SCStream?
+    private var generation = 0
     private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
     var onFrame: ((NSImage) -> Void)?
 
     func start(windowID: CGWindowID) {
+        generation += 1
+        let gen = generation
         stop()
+        generation = gen
         Task { [weak self] in
             do {
                 let content: SCShareableContent
@@ -40,7 +44,12 @@ final class LiveCapture: NSObject {
                 try stream.addStreamOutput(self, type: .screen,
                                            sampleHandlerQueue: DispatchQueue(label: "winswitch.capture"))
                 try await stream.startCapture()
-                self.stream = stream
+                if self.generation == gen {
+                    self.stream = stream
+                } else {
+                    // Selection moved on while we were starting — drop this stream.
+                    try? await stream.stopCapture()
+                }
             } catch {
                 // Missing Screen Recording permission or window vanished — the
                 // static thumbnail remains in place.

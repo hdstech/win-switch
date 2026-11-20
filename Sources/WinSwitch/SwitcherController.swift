@@ -5,8 +5,20 @@ final class SwitcherState: ObservableObject {
     @Published var windows: [WindowItem] = []
     @Published var selectedIndex = 0
     @Published var liveImage: NSImage?
+    // Preferences (persisted): "previews"|"icons", "bottom"|"side"
+    @Published var gridStyle: String {
+        didSet { UserDefaults.standard.set(gridStyle, forKey: "gridStyle") }
+    }
+    @Published var gridPosition: String {
+        didSet { UserDefaults.standard.set(gridPosition, forKey: "gridPosition") }
+    }
     var isOpen = false
     var gridColumns = 1
+
+    init() {
+        gridStyle = UserDefaults.standard.string(forKey: "gridStyle") ?? "previews"
+        gridPosition = UserDefaults.standard.string(forKey: "gridPosition") ?? "bottom"
+    }
 }
 
 /// State machine for the switcher UI. While open it polls CGEventSource for the
@@ -43,12 +55,14 @@ final class SwitcherController {
         state.selectedIndex = state.windows.count > 1 ? 1 : 0
         state.liveImage = nil
 
-        loadThumbnails()
-
-        panel = SwitcherPanel(state: state) { [weak self] index in
-            self?.commit(index: index)
+        // Instant thumbnails from the warm cache; async refresh fills in gaps.
+        for i in state.windows.indices {
+            state.windows[i].thumbnail =
+                ThumbnailCache.shared.image(for: state.windows[i].id)
         }
-        panel?.present()
+        loadThumbnails()
+        presentPanel()
+
         state.isOpen = true
         startPolling()
         startLiveCapture()
@@ -62,7 +76,21 @@ final class SwitcherController {
         }
     }
 
-    private func select(_ index: Int, wrap: Bool = false) {
+    private func presentPanel() {
+        panel = SwitcherPanel(state: state,
+                              onSelect: { [weak self] i in self?.commit(index: i) },
+                              onHover: { [weak self] i in self?.select(i) })
+        panel?.present()
+    }
+
+    /// Rebuild the panel when a layout-affecting preference changes.
+    func refreshLayout() {
+        guard state.isOpen else { return }
+        panel?.dismiss()
+        presentPanel()
+    }
+
+    func select(_ index: Int, wrap: Bool = false) {
         let count = state.windows.count
         guard count > 0 else { return }
         let next = wrap ? (index + count) % count : max(0, min(count - 1, index))
