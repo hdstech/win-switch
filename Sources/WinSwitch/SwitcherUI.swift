@@ -13,6 +13,7 @@ struct GridLayout {
     let cellHeight: CGFloat
     let previewWidth: CGFloat
     let previewHeight: CGFloat
+    let gridWidth: CGFloat
     let panelSize: NSSize
 
     init(count: Int, screen: NSRect, position: String) {
@@ -40,33 +41,24 @@ struct GridLayout {
         previewHeight = min(340, screen.height * 0.4)
         let w = 2 * padding + CGFloat(cols) * cellWidth + spacing * CGFloat(cols - 1)
         let gridH = CGFloat(rows) * cellHeight + spacing * CGFloat(rows - 1)
+        gridWidth = w
         let h = previewHeight + 34 + 12 + gridH + 2 * padding
         panelSize = NSSize(width: w, height: min(h, screen.height - 80))
     }
 
+    // "side" mode — fixed panel size regardless of window count; the window
+    // list on the left scrolls vertically if it overflows.
     private init(side count: Int, screen: NSRect) {
-        let maxH = screen.height - 140
-        let n = max(count, 1)
-        let sideCols = n > 5 ? 2 : 1
-        columns = sideCols
-        let rows = max(1, Int(ceil(Double(n) / Double(sideCols))))
-
-        let baseCellW: CGFloat = 180
-        cellWidth = baseCellW
-        // Shrink thumbnails vertically if needed so every row fits on screen.
-        let availPerRow = (maxH - 2 * padding - spacing * CGFloat(rows - 1)) / CGFloat(rows)
-        thumbHeight = max(60, min(cellWidth * 0.62, availPerRow - 26))
+        columns = 1
+        cellWidth = 190
+        thumbHeight = cellWidth * 0.62
         cellHeight = thumbHeight + 26
+        gridWidth = cellWidth + 8 // room for the scrollbar
 
-        let gridW = CGFloat(sideCols) * cellWidth + spacing * CGFloat(sideCols - 1)
-        let gridH = CGFloat(rows) * cellHeight + spacing * CGFloat(rows - 1)
-
-        previewWidth = min(560, (screen.width - 120) * 0.45)
-        let contentH = max(gridH, 320)
-        previewHeight = contentH
-        panelSize = NSSize(
-            width: 2 * padding + previewWidth + spacing + gridW,
-            height: contentH + 34 + 2 * padding)
+        panelSize = NSSize(width: min(920, screen.width * 0.55),
+                           height: min(700, screen.height * 0.62))
+        previewWidth = panelSize.width - 2 * padding - spacing - gridWidth
+        previewHeight = panelSize.height - 34 - 2 * padding
     }
 }
 
@@ -132,10 +124,10 @@ struct SwitcherRootView: View {
     var body: some View {
         Group {
             if state.gridPosition == "side" {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: layout.spacing) {
+                    sideGrid
                     preview
                         .frame(width: layout.previewWidth)
-                    grid
                 }
             } else {
                 VStack(spacing: 12) {
@@ -198,25 +190,54 @@ struct SwitcherRootView: View {
 
     // MARK: Fixed grid of all windows
 
+    private var cells: some View {
+        ForEach(Array(state.windows.enumerated()), id: \.element.id) { index, item in
+            GridCell(item: item,
+                     isSelected: index == state.selectedIndex,
+                     iconsOnly: state.gridStyle == "icons",
+                     width: layout.cellWidth,
+                     thumbHeight: layout.thumbHeight)
+                .id(item.id)
+                .onTapGesture { onSelect(index) }
+                .onHover { inside in
+                    if inside { onHover(index) }
+                }
+        }
+    }
+
     private var grid: some View {
         LazyVGrid(
             columns: Array(repeating: GridItem(.fixed(layout.cellWidth),
                                              spacing: layout.spacing),
                            count: layout.columns),
             spacing: layout.spacing
-        ) {
-            ForEach(Array(state.windows.enumerated()), id: \.element.id) { index, item in
-                GridCell(item: item,
-                         isSelected: index == state.selectedIndex,
-                         iconsOnly: state.gridStyle == "icons",
-                         width: layout.cellWidth,
-                         thumbHeight: layout.thumbHeight)
-                    .onTapGesture { onSelect(index) }
-                    .onHover { inside in
-                        if inside { onHover(index) }
+        ) { cells }
+    }
+
+    // Scrollable single-column list for "side" mode, keeping the selection
+    // in view.
+    private var sideGrid: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                LazyVGrid(columns: [GridItem(.fixed(layout.cellWidth),
+                                            spacing: layout.spacing)],
+                          spacing: layout.spacing) { cells }
+            }
+            .frame(width: layout.gridWidth,
+                   height: layout.previewHeight + 34)
+            .onChange(of: state.selectedIndex) { _ in
+                if let id = selectedWindowID {
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        proxy.scrollTo(id, anchor: .center)
                     }
+                }
             }
         }
+    }
+
+    private var selectedWindowID: CGWindowID? {
+        state.windows.indices.contains(state.selectedIndex)
+            ? state.windows[state.selectedIndex].id : nil
     }
 
     private func badge(_ text: String) -> some View {

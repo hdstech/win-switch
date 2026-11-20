@@ -28,9 +28,12 @@ enum SkyLight {
     // Space a given window lives on (0/1 when unknown or minimized).
     typealias GetWindowWorkspace = @convention(c) (CGSConnectionID, UInt32, UnsafeMutablePointer<UInt64>) -> Int32
     static let getWindowWorkspace = sym("CGSGetWindowWorkspace", GetWindowWorkspace.self)
+    static let slsGetWindowWorkspace = sym("SLSGetWindowWorkspace", GetWindowWorkspace.self)
 
-    typealias WindowCopyWorkspaceID = @convention(c) (CGSConnectionID, UInt32) -> UInt64
-    static let windowCopyWorkspaceID = sym("SLSWindowCopyWorkspaceID", WindowCopyWorkspaceID.self)
+    // Returns the space IDs containing the given windows — works on macOS 26
+    // where GetWindowWorkspace is neutered (returns 0). Selector 7 = all spaces.
+    typealias CopySpacesForWindows = @convention(c) (CGSConnectionID, Int, CFArray) -> Unmanaged<CFArray>?
+    static let copySpacesForWindows = sym("SLSCopySpacesForWindows", CopySpacesForWindows.self)
 
     typealias CopyManagedDisplaySpaces = @convention(c) (CGSConnectionID) -> Unmanaged<CFArray>?
     static let copyManagedDisplaySpaces = sym("CGSCopyManagedDisplaySpaces", CopyManagedDisplaySpaces.self)

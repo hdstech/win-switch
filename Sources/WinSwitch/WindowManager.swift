@@ -22,11 +22,29 @@ enum WindowManager {
 
     static func space(forWindow wid: CGWindowID) -> UInt64 {
         let cid = SkyLight.cid
-        if let f = SkyLight.getWindowWorkspace {
-            var space: UInt64 = 0
-            if f(cid, wid, &space) == 0 { return space }
+        // Preferred: SLSCopySpacesForWindows — the only API that still works on
+        // macOS 26 (GetWindowWorkspace returns 0 for every window).
+        if let f = SkyLight.copySpacesForWindows,
+           let spaces = f(cid, 7 /* all spaces */, [NSNumber(value: wid)] as CFArray)?
+               .takeRetainedValue() as? [NSNumber],
+           let first = spaces.first {
+            return first.uint64Value
         }
-        return SkyLight.windowCopyWorkspaceID?(cid, wid) ?? 0
+        for fn in [SkyLight.getWindowWorkspace, SkyLight.slsGetWindowWorkspace] {
+            if let f = fn {
+                var space: UInt64 = 0
+                if f(cid, wid, &space) == 0, space > 1 { return space }
+            }
+        }
+        return 0
+    }
+
+    /// Set of window IDs currently on screen (key may be absent from the
+    /// window dict on newer macOS — query on-screen windows directly instead).
+    static func onscreenWindowIDs() -> Set<CGWindowID> {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
+                as? [[String: Any]] else { return [] }
+        return Set(list.compactMap { $0[kCGWindowNumber as String] as? CGWindowID })
     }
 
     /// All normal-layer windows across every space, including minimized ones.
@@ -38,6 +56,7 @@ enum WindowManager {
 
         let myPID = ProcessInfo.processInfo.processIdentifier
         let axTrusted = AXIsProcessTrusted()
+        let onscreenIDs = onscreenWindowIDs()
         var axMapCache: [pid_t: [CGWindowID: AXUIElement]] = [:]
         var items: [WindowItem] = []
 
@@ -65,7 +84,7 @@ enum WindowManager {
                   running.activationPolicy == .regular else { continue }
 
             let title = dict[kCGWindowName as String] as? String ?? ""
-            let onscreen = dict[kCGWindowIsOnscreen as String] as? Bool ?? false
+            let onscreen = onscreenIDs.contains(wid)
             let space = space(forWindow: wid)
 
             var minimized = false
