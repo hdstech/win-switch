@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func requestPermissions() {
+        print("WinSwitch perms: screenRecording=\(CGPreflightScreenCaptureAccess()) accessibility=\(AXIsProcessTrusted())")
+        fflush(stdout)
         // Accessibility is needed to detect/unminimize/raise specific windows.
         _ = AXIsProcessTrustedWithOptions(
             [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)

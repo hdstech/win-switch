@@ -46,9 +46,22 @@ On first launch macOS will ask for:
 
 If you deny either, the app still runs but is degraded (icons instead of
 thumbnails; windows may not unminimize/raise). Grant them in
-System Settings → Privacy & Security, then relaunch. Because the app is
-ad-hoc signed, you may need to re-grant after rebuilding (use the menu-bar
+System Settings → Privacy & Security, then relaunch (use the menu-bar
 menu for quick links to the right panes).
+
+**TCC identity note:** permissions are tied to the code signature. Builds
+signed ad-hoc (`codesign -`) get a *new* identity every rebuild and lose
+grants. A stable certificate (self-signed `WinSwitch Dev`, Apple
+Development, or Developer ID) makes grants persist — the `Makefile` picks
+the best available automatically. If the Settings pane shows stale
+`WinSwitch` entries from older builds, clear them once:
+
+```sh
+tccutil reset ScreenCapture com.local.winswitch
+tccutil reset Accessibility com.local.winswitch
+```
+
+then relaunch and re-grant.
 
 ## How it works
 
