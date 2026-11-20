@@ -1,10 +1,23 @@
 APP := WinSwitch.app
 BIN := .build/release/WinSwitch
-# Prefer a real signing identity so TCC permissions persist across rebuilds
-# (ad-hoc signing changes the cdhash every build, revoking grants).
-SIGN_ID := $(shell security find-identity -v -p codesigning 2>/dev/null | sed -n 's/.*"\(.*\)".*/\1/p' | head -1)
+ZIP := WinSwitch.zip
 
-.PHONY: all app run clean
+# Signing identity preference order:
+#   Developer ID Application (distributes + notarizes) >
+#   Apple Development (paid-account dev cert) >
+#   "WinSwitch Dev" (self-signed, keeps TCC stable locally) >
+#   ad-hoc (fallback; TCC is revoked on every rebuild)
+# Override explicitly with: make app SIGN_ID="Developer ID Application: You (TEAMID)"
+SIGN_ID ?= $(shell security find-identity -v -p codesigning 2>/dev/null \
+	| sed -n 's/.*"\(.*\)"/\1/p' \
+	| grep -E "Developer ID Application|Apple Development|WinSwitch Dev" | head -1)
+
+# Keychain profile for notarization. Create once with:
+#   xcrun notarytool store-credentials winswitch-notary \
+#       --apple-id you@apple.com --team-id TEAMID --password <app-specific-password>
+NOTARY_PROFILE ?= winswitch-notary
+
+.PHONY: all app run notarize dist clean
 
 all: app
 
@@ -13,8 +26,11 @@ app: $(BIN)
 	cp "$(BIN)" "$(APP)/Contents/MacOS/WinSwitch"
 	cp Info.plist "$(APP)/Contents/Info.plist"
 	@if [ -n "$(SIGN_ID)" ]; then \
-		codesign --force --deep --sign "$(SIGN_ID)" --identifier com.local.winswitch --timestamp=none "$(APP)"; \
+		echo "Signing with: $(SIGN_ID)"; \
+		codesign --force --deep --sign "$(SIGN_ID)" \
+			--identifier com.local.winswitch --options runtime "$(APP)"; \
 	else \
+		echo "Signing ad-hoc (no identity found; permissions won't persist)"; \
 		codesign --force --deep --sign - "$(APP)"; \
 	fi
 
@@ -24,5 +40,17 @@ $(BIN):
 run: app
 	open "$(APP)"
 
+# Notarize and staple the ticket for Gatekeeper-free distribution.
+notarize: app
+	ditto -c -k --keepParent "$(APP)" "$(ZIP)"
+	xcrun notarytool submit "$(ZIP)" --keychain-profile "$(NOTARY_PROFILE)" --wait
+	xcrun stapler staple "$(APP)"
+	@echo "Notarized. Distribute $(APP) (or rezip after stapling)."
+
+# Rezip the stapled app for a GitHub release.
+dist: notarize
+	ditto -c -k --keepParent "$(APP)" "$(ZIP)"
+	@echo "Upload $(ZIP) to your GitHub release."
+
 clean:
-	rm -rf .build "$(APP)"
+	rm -rf .build "$(APP)" "$(ZIP)"
