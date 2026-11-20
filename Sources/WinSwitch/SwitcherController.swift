@@ -5,6 +5,9 @@ final class SwitcherState: ObservableObject {
     @Published var windows: [WindowItem] = []
     @Published var selectedIndex = 0
     @Published var liveImage: NSImage?
+    /// Bumped when the selection should be scrolled into view (keyboard nav
+    /// only — mouse hover selects without scrolling).
+    @Published var scrollRequest = 0
     // Preferences (persisted): "previews"|"icons", "bottom"|"side"
     @Published var gridStyle: String {
         didSet { UserDefaults.standard.set(gridStyle, forKey: "gridStyle") }
@@ -42,7 +45,7 @@ final class SwitcherController {
     // Hotkey IDs: 1 = ⌥⇥ next, 2 = ⇧⌥⇥ previous
     func onHotKey(id: Int) {
         if state.isOpen {
-            select(state.selectedIndex + (id == 2 ? -1 : 1), wrap: true)
+            select(state.selectedIndex + (id == 2 ? -1 : 1), wrap: true, scroll: true)
         } else {
             open()
         }
@@ -90,7 +93,7 @@ final class SwitcherController {
         presentPanel()
     }
 
-    func select(_ index: Int, wrap: Bool = false) {
+    func select(_ index: Int, wrap: Bool = false, scroll: Bool = false) {
         let count = state.windows.count
         guard count > 0 else { return }
         let next = wrap ? (index + count) % count : max(0, min(count - 1, index))
@@ -98,6 +101,7 @@ final class SwitcherController {
         state.selectedIndex = next
         state.liveImage = nil
         startLiveCapture()
+        if scroll { state.scrollRequest += 1 }
     }
 
     private func commit(index: Int? = nil) {
@@ -140,6 +144,7 @@ final class SwitcherController {
                 for i in self.state.windows.indices {
                     if let t = thumbs[self.state.windows[i].id] {
                         self.state.windows[i].thumbnail = t
+                        ThumbnailCache.shared.set(self.state.windows[i].id, image: t)
                     }
                 }
             }
@@ -167,15 +172,15 @@ final class SwitcherController {
         // Escape cancels; arrows navigate the grid. Edge-triggered so one
         // press = one move.
         checkKey(53) { [weak self] in self?.cancel() }
-        checkKey(123) { [weak self] in self?.select((self?.state.selectedIndex ?? 0) - 1, wrap: true) }
-        checkKey(124) { [weak self] in self?.select((self?.state.selectedIndex ?? 0) + 1, wrap: true) }
+        checkKey(123) { [weak self] in self?.select((self?.state.selectedIndex ?? 0) - 1, wrap: true, scroll: true) }
+        checkKey(124) { [weak self] in self?.select((self?.state.selectedIndex ?? 0) + 1, wrap: true, scroll: true) }
         checkKey(126) { [weak self] in
             guard let self else { return }
-            self.select(self.state.selectedIndex - self.state.gridColumns)
+            self.select(self.state.selectedIndex - self.state.gridColumns, scroll: true)
         }
         checkKey(125) { [weak self] in
             guard let self else { return }
-            self.select(self.state.selectedIndex + self.state.gridColumns)
+            self.select(self.state.selectedIndex + self.state.gridColumns, scroll: true)
         }
     }
 

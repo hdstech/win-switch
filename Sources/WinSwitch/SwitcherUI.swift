@@ -225,7 +225,7 @@ struct SwitcherRootView: View {
             }
             .frame(width: layout.gridWidth,
                    height: layout.previewHeight + 34)
-            .onChange(of: state.selectedIndex) { _ in
+            .onChange(of: state.scrollRequest) { _ in
                 if let id = selectedWindowID {
                     withAnimation(.easeOut(duration: 0.12)) {
                         proxy.scrollTo(id, anchor: .center)
