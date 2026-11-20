@@ -17,14 +17,15 @@ SIGN_ID ?= $(shell security find-identity -v -p codesigning 2>/dev/null \
 #       --apple-id you@apple.com --team-id TEAMID --password <app-specific-password>
 NOTARY_PROFILE ?= winswitch-notary
 
-.PHONY: all app run notarize dist clean
+.PHONY: all app run install icon notarize dist clean
 
 all: app
 
 app: $(BIN)
-	mkdir -p "$(APP)/Contents/MacOS"
+	mkdir -p "$(APP)/Contents/MacOS" "$(APP)/Contents/Resources"
 	cp "$(BIN)" "$(APP)/Contents/MacOS/WinSwitch"
 	cp Info.plist "$(APP)/Contents/Info.plist"
+	cp Assets/WinSwitch.icns "$(APP)/Contents/Resources/" 2>/dev/null || true
 	@if [ -n "$(SIGN_ID)" ]; then \
 		echo "Signing with: $(SIGN_ID)"; \
 		codesign --force --deep --sign "$(SIGN_ID)" \
@@ -36,6 +37,12 @@ app: $(BIN)
 
 $(BIN):
 	swift build -c release
+
+# Regenerate Assets/WinSwitch.icns from tools/make_icon.swift
+icon:
+	swift tools/make_icon.swift .iconbuild
+	iconutil -c icns .iconbuild/icon.iconset -o Assets/WinSwitch.icns
+	rm -rf .iconbuild
 
 run: app
 	open "$(APP)"

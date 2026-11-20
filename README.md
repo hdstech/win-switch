@@ -1,5 +1,7 @@
 # WinSwitch
 
+<img src="Assets/icon-preview.png" width="128" alt="WinSwitch icon">
+
 An AltTab-style window switcher for macOS: press **⌥⇥ (Option+Tab)** to flip
 through every open window — across all apps, all Spaces, including minimized
 windows — with a thumbnail preview of each.

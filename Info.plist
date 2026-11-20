@@ -14,6 +14,10 @@
 	<string>1</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
+	<key>CFBundleIconFile</key>
+	<string>WinSwitch</string>
+	<key>CFBundleIconName</key>
+	<string>WinSwitch</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>LSMinimumSystemVersion</key>
