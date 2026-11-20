@@ -22,7 +22,8 @@ windows — with a thumbnail preview of each.
 ## Build & run
 
 ```sh
-make run    # swift build -c release → WinSwitch.app → open it
+make install  # build, sign, install to /Applications and launch
+make run      # build and run the copy in the project folder instead
 ```
 
 Or manually:

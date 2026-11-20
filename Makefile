@@ -40,6 +40,13 @@ $(BIN):
 run: app
 	open "$(APP)"
 
+# Install to /Applications and launch from there. Removes the project copy.
+install: app
+	-pkill -f "$(APP)/Contents/MacOS/WinSwitch" || true
+	ditto "$(APP)" /Applications/"$(APP)"
+	rm -rf "$(APP)"
+	open /Applications/"$(APP)"
+
 # Notarize and staple the ticket for Gatekeeper-free distribution.
 notarize: app
 	ditto -c -k --keepParent "$(APP)" "$(ZIP)"
