@@ -19,6 +19,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !CGPreflightScreenCaptureAccess() {
             _ = CGRequestScreenCaptureAccess()
         }
+        // After the system prompt settles, warn if permissions are still
+        // missing (e.g. a stale grant from a previous ad-hoc-signed build).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            self?.showPermissionNoticeIfNeeded()
+        }
+    }
+
+    private func showPermissionNoticeIfNeeded() {
+        var missing: [String] = []
+        if !CGPreflightScreenCaptureAccess() {
+            missing.append("• Screen Recording — needed for window previews and titles")
+        }
+        if !AXIsProcessTrusted() {
+            missing.append("• Accessibility — needed to raise and un-minimize windows")
+        }
+        guard !missing.isEmpty else { return }
+
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "WinSwitch is missing permissions"
+        alert.informativeText = missing.joined(separator: "\n")
+            + "\n\nEnable them in System Settings → Privacy & Security, then quit and relaunch WinSwitch."
+        alert.addButton(withTitle: "Open Screen Recording Settings")
+        alert.addButton(withTitle: "Not Now")
+        if alert.runModal() == .alertFirstButtonReturn { openSRSettings() }
     }
 
     private func setupStatusItem() {

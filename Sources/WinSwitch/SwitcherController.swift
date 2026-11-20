@@ -102,12 +102,12 @@ final class SwitcherController {
 
     private func loadThumbnails() {
         let items = state.windows
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task.detached { [weak self] in
             var thumbs: [CGWindowID: NSImage] = [:]
             for w in items {
-                if let img = Thumbnails.capture(w.id) { thumbs[w.id] = img }
+                if let img = await Thumbnails.capture(w.id) { thumbs[w.id] = img }
             }
-            DispatchQueue.main.async {
+            await MainActor.run {
                 guard let self, self.state.isOpen else { return }
                 for i in self.state.windows.indices {
                     if let t = thumbs[self.state.windows[i].id] {
