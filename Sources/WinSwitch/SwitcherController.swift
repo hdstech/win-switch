@@ -6,6 +6,7 @@ final class SwitcherState: ObservableObject {
     @Published var selectedIndex = 0
     @Published var liveImage: NSImage?
     var isOpen = false
+    var gridColumns = 1
 }
 
 /// State machine for the switcher UI. While open it polls CGEventSource for the
@@ -29,7 +30,7 @@ final class SwitcherController {
     // Hotkey IDs: 1 = ⌥⇥ next, 2 = ⇧⌥⇥ previous
     func onHotKey(id: Int) {
         if state.isOpen {
-            moveSelection(id == 2 ? -1 : 1)
+            select(state.selectedIndex + (id == 2 ? -1 : 1), wrap: true)
         } else {
             open()
         }
@@ -61,10 +62,12 @@ final class SwitcherController {
         }
     }
 
-    private func moveSelection(_ delta: Int) {
+    private func select(_ index: Int, wrap: Bool = false) {
         let count = state.windows.count
         guard count > 0 else { return }
-        state.selectedIndex = (state.selectedIndex + delta + count) % count
+        let next = wrap ? (index + count) % count : max(0, min(count - 1, index))
+        guard next != state.selectedIndex else { return }
+        state.selectedIndex = next
         state.liveImage = nil
         startLiveCapture()
     }
@@ -133,10 +136,19 @@ final class SwitcherController {
             return
         }
 
-        // Escape cancels; arrows navigate. Edge-triggered so one press = one move.
+        // Escape cancels; arrows navigate the grid. Edge-triggered so one
+        // press = one move.
         checkKey(53) { [weak self] in self?.cancel() }
-        checkKey(123) { [weak self] in self?.moveSelection(-1) }
-        checkKey(124) { [weak self] in self?.moveSelection(1) }
+        checkKey(123) { [weak self] in self?.select((self?.state.selectedIndex ?? 0) - 1, wrap: true) }
+        checkKey(124) { [weak self] in self?.select((self?.state.selectedIndex ?? 0) + 1, wrap: true) }
+        checkKey(126) { [weak self] in
+            guard let self else { return }
+            self.select(self.state.selectedIndex - self.state.gridColumns)
+        }
+        checkKey(125) { [weak self] in
+            guard let self else { return }
+            self.select(self.state.selectedIndex + self.state.gridColumns)
+        }
     }
 
     private func checkKey(_ code: CGKeyCode, _ action: () -> Void) {

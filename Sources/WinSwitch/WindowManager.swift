@@ -59,6 +59,11 @@ enum WindowManager {
             let appName = dict[kCGWindowOwnerName as String] as? String ?? "Unknown"
             if appName == "Window Server" { continue }
 
+            // Only apps that live in the Dock — this filters out background
+            // services and UIElement agents that own layer-0 windows.
+            guard let running = NSRunningApplication(processIdentifier: pid),
+                  running.activationPolicy == .regular else { continue }
+
             let title = dict[kCGWindowName as String] as? String ?? ""
             let onscreen = dict[kCGWindowIsOnscreen as String] as? Bool ?? false
             let space = space(forWindow: wid)
@@ -77,7 +82,7 @@ enum WindowManager {
                 isOnscreen: onscreen,
                 isMinimized: minimized,
                 spaceID: space,
-                icon: NSRunningApplication(processIdentifier: pid)?.icon,
+                icon: running.icon,
                 thumbnail: nil
             ))
         }
