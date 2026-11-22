@@ -85,13 +85,28 @@ enum WindowManager {
 
             let title = dict[kCGWindowName as String] as? String ?? ""
             let onscreen = onscreenIDs.contains(wid)
+
+            // CGWindowList also reports ghost entries: hidden proxy/backing
+            // windows that no AXUIElement claims (duplicates, offscreen
+            // placeholders). They can't be captured, so they surface as
+            // icon-only tiles next to the real window's tile. When the app
+            // answers AX with any windows at all, entries it doesn't claim
+            // are not user-facing — skip them. An empty map means AX isn't
+            // available for that app, so we can't verify and keep everything.
+            var element: AXUIElement?
+            if axTrusted {
+                if axMapCache[pid] == nil { axMapCache[pid] = axWindowMap(pid: pid) }
+                let map = axMapCache[pid] ?? [:]
+                if !map.isEmpty {
+                    guard let el = map[wid] else { continue }
+                    element = el
+                }
+            }
+
             let space = space(forWindow: wid)
 
             var minimized = false
-            if !onscreen && axTrusted {
-                if axMapCache[pid] == nil { axMapCache[pid] = axWindowMap(pid: pid) }
-                if let el = axMapCache[pid]?[wid], isMinimized(el) { minimized = true }
-            }
+            if !onscreen, let el = element, isMinimized(el) { minimized = true }
 
             items.append(WindowItem(
                 id: wid,
