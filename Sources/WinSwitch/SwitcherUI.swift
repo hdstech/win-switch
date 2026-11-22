@@ -38,12 +38,23 @@ struct GridLayout {
         thumbHeight = cellWidth * 0.62
         cellHeight = thumbHeight + 26
         previewWidth = 0
-        previewHeight = min(340, screen.height * 0.4)
+        var ph = min(340, screen.height * 0.4)
         let w = 2 * padding + CGFloat(cols) * cellWidth + spacing * CGFloat(cols - 1)
         let gridH = CGFloat(rows) * cellHeight + spacing * CGFloat(rows - 1)
         gridWidth = w
-        let h = previewHeight + 34 + 12 + gridH + 2 * padding
-        panelSize = NSSize(width: w, height: min(h, screen.height - 80))
+        let maxPanelH = screen.height - 80
+        var h = ph + 34 + 12 + gridH + 2 * padding
+        if h > maxPanelH {
+            // Panel clamps to the screen; shrink the preview so the grid keeps
+            // as much room as possible (it scrolls if it still overflows —
+            // otherwise the VStack overflows the panel and the top padding
+            // is clipped away).
+            let reduced = max(120, ph - (h - maxPanelH))
+            h -= ph - reduced
+            ph = reduced
+        }
+        previewHeight = ph
+        panelSize = NSSize(width: w, height: min(h, maxPanelH))
     }
 
     // "side" mode — fixed panel size regardless of window count; the window
@@ -132,7 +143,7 @@ struct SwitcherRootView: View {
             } else {
                 VStack(spacing: 12) {
                     preview
-                    grid
+                    bottomGrid
                 }
             }
         }
@@ -212,6 +223,22 @@ struct SwitcherRootView: View {
                            count: layout.columns),
             spacing: layout.spacing
         ) { cells }
+    }
+
+    // "bottom" mode wraps the grid in a ScrollView so a window list taller
+    // than the panel scrolls instead of overflowing (which would clip the
+    // top padding). Scrolls only when needed; keeps the selection in view.
+    private var bottomGrid: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) { grid }
+                .onChange(of: state.scrollRequest) { _ in
+                    if let id = selectedWindowID {
+                        withAnimation(.easeOut(duration: 0.12)) {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
+                    }
+                }
+        }
     }
 
     // Scrollable single-column list for "side" mode, keeping the selection
