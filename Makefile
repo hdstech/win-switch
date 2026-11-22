@@ -45,6 +45,7 @@ icon:
 	rm -rf .iconbuild
 
 run: app
+	-pkill -f "$(APP)/Contents/MacOS/WinSwitch" || true
 	open "$(APP)"
 
 # Install to /Applications and launch from there. Removes the project copy.
